@@ -16,7 +16,7 @@ import { FileSystem } from "@server/fileSystem";
 import { ChatResponse } from "@server/types";
 import { startChat } from "../apple/scripts";
 import { MessageInterface } from "./messageInterface";
-import { CHAT_READ_STATUS_CHANGED } from "@server/events";
+import { CHAT_READ_STATUS_CHANGED, CHAT_PIN_UPDATED } from "@server/events";
 import { ChatSerializer } from "../serializers/ChatSerializer";
 import { Attachment } from "@server/databases/imessage/entity/Attachment";
 import { Message } from "@server/databases/imessage/entity/Message";
@@ -393,6 +393,9 @@ export class ChatInterface {
         if (!success) {
             throw new Error(`Failed to delete chat! Chat still exists. (GUID: ${theChat.guid})`);
         }
+
+        // Clean up any server-owned pin state for the now-deleted chat
+        await Server().repo.removePinnedChat(theChat.guid);
     }
 
     static async setGroupChatIcon(chat: Chat, iconPath: string | null): Promise<void> {
@@ -450,6 +453,30 @@ export class ChatInterface {
 
         // Tell the private API to delete the chat
         await Server().privateApi.chat.leave(theChat.guid);
+    }
+
+    static async setPinned(
+        chatGuid: string,
+        isPinned: boolean,
+        pinIndex?: number | null
+    ): Promise<{ isPinned: boolean; pinIndex: number | null }> {
+        const repo = Server().repo;
+
+        if (!isPinned) {
+            await repo.removePinnedChat(chatGuid);
+            await Server().emitMessage(CHAT_PIN_UPDATED, { chatGuid, isPinned: false, pinIndex: null });
+            return { isPinned: false, pinIndex: null };
+        }
+
+        let resolvedIndex = pinIndex;
+        if (resolvedIndex === null || resolvedIndex === undefined) {
+            const existing = await repo.getPinnedChats();
+            resolvedIndex = existing.length > 0 ? Math.max(...existing.map(e => e.pinIndex)) + 1 : 0;
+        }
+
+        await repo.setPinnedChat(chatGuid, resolvedIndex);
+        await Server().emitMessage(CHAT_PIN_UPDATED, { chatGuid, isPinned: true, pinIndex: resolvedIndex });
+        return { isPinned: true, pinIndex: resolvedIndex };
     }
 
     static async markRead(chatGuid: string): Promise<void> {

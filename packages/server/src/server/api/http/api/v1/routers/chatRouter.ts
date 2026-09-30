@@ -155,6 +155,8 @@ export class ChatRouter {
         const { body } = ctx.request;
         const { guid } = ctx.params;
         const displayName = body?.displayName;
+        const isPinned = body?.isPinned;
+        const pinIndex = body?.pinIndex;
 
         const [chats, __] = await Server().iMessageRepo.getChats({ chatGuid: guid, withParticipants: true });
         if (isEmpty(chats)) throw new NotFound({ error: "Chat does not exist!" });
@@ -170,6 +172,15 @@ export class ChatRouter {
             try {
                 chat = await ChatInterface.setDisplayName(chat, displayName);
                 updated.push("displayName");
+            } catch (ex: any) {
+                errors.push(ex?.message ?? ex);
+            }
+        }
+
+        if (typeof isPinned === "boolean" || typeof pinIndex === "number") {
+            try {
+                await ChatInterface.setPinned(chat.guid, isPinned ?? true, pinIndex);
+                updated.push("isPinned");
             } catch (ex: any) {
                 errors.push(ex?.message ?? ex);
             }

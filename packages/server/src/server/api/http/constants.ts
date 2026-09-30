@@ -48,6 +48,10 @@ export const webhookEventOptions = [
         value: 'chat-read-status-changed'
     },
     {
+        label: 'Chat Pin Status Changed',
+        value: 'chat-pin-updated'
+    },
+    {
         label: 'Typing Indicators',
         value: 'typing-indicator'
     },

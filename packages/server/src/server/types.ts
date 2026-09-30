@@ -101,6 +101,8 @@ export type ChatResponse = {
     displayName: string;
     groupId?: string;
     lastAddressedHandle?: string | null;
+    isPinned?: boolean;
+    pinIndex?: number | null;
 };
 
 export type AttachmentResponse = {

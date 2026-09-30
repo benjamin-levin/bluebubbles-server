@@ -32,7 +32,9 @@ export class ChatValidator {
     }
 
     static updateRules = {
-        displayName: "string|min:1"
+        displayName: "string|min:1",
+        isPinned: "boolean",
+        pinIndex: "integer|min:0"
     };
 
     static async validateUpdate(ctx: RouterContext, next: Next) {

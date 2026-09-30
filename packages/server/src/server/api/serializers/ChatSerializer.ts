@@ -1,3 +1,4 @@
+import { Server } from "@server";
 import { ChatResponse } from "@server/types";
 import { DEFAULT_CHAT_CONFIG, DEFAULT_HANDLE_CONFIG, DEFAULT_MESSAGE_CONFIG } from "./constants";
 import type { ChatSerializerMutliParams, ChatSerializerSingleParams } from "./types";
@@ -30,6 +31,10 @@ export class ChatSerializer {
         handleConfig = DEFAULT_HANDLE_CONFIG,
         isForNotification = false
     }: ChatSerializerMutliParams): Promise<ChatResponse[]> {
+        // Fetch the server-owned pin state once for the whole batch, rather than per-chat.
+        const pinnedChats = await Server().repo.getPinnedChats();
+        const pinIndexByGuid = new Map<string, number>(pinnedChats.map(p => [p.chatGuid, p.pinIndex]));
+
         return Promise.all(
             chats.map(
                 async chat =>
@@ -38,7 +43,8 @@ export class ChatSerializer {
                         config: { ...DEFAULT_CHAT_CONFIG, ...config },
                         messageConfig: { ...DEFAULT_MESSAGE_CONFIG, ...messageConfig },
                         handleConfig: { ...DEFAULT_HANDLE_CONFIG, ...handleConfig },
-                        isForNotification
+                        isForNotification,
+                        pinIndex: pinIndexByGuid.has(chat.guid) ? pinIndexByGuid.get(chat.guid) : null
                     })
             )
         );
@@ -49,15 +55,18 @@ export class ChatSerializer {
         config = DEFAULT_CHAT_CONFIG,
         messageConfig = DEFAULT_MESSAGE_CONFIG,
         handleConfig = DEFAULT_HANDLE_CONFIG,
-        isForNotification = false
-    }: ChatSerializerSingleParams): Promise<ChatResponse> {
+        isForNotification = false,
+        pinIndex = null
+    }: ChatSerializerSingleParams & { pinIndex?: number | null }): Promise<ChatResponse> {
         let output: ChatResponse = {
             originalROWID: chat.ROWID,
             guid: chat.guid,
             style: chat.style,
             chatIdentifier: chat.chatIdentifier,
             isArchived: chat.isArchived,
-            displayName: chat.displayName
+            displayName: chat.displayName,
+            isPinned: pinIndex !== null,
+            pinIndex
         };
 
         if (config.includeParticipants) {

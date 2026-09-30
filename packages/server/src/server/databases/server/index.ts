@@ -4,10 +4,11 @@ import { EventEmitter } from "events";
 import { DataSource } from "typeorm";
 import { Server } from "@server";
 import { isEmpty, isNotEmpty } from "@server/helpers/utils";
-import { Config, Alert, Device, Queue, Webhook, Contact, ContactAddress, ScheduledMessage } from "./entity";
+import { Config, Alert, Device, Queue, Webhook, Contact, ContactAddress, ScheduledMessage, PinnedChat } from "./entity";
 import { DEFAULT_DB_ITEMS } from "./constants";
 import { ContactTables1654432080899 } from "./migrations/1654432080899-ContactTables";
 import { ScheduledMessageTable1665083072000 } from "./migrations/1665083072000-ScheduledMessageTable";
+import { PinnedChatTable1727700000000 } from "./migrations/1727700000000-PinnedChatTable";
 
 export type ServerConfig = { [key: string]: Date | string | boolean | number };
 export type ServerConfigChange = { prevConfig: ServerConfig; nextConfig: ServerConfig };
@@ -43,8 +44,8 @@ export class ServerRepository extends EventEmitter {
             name: "config",
             type: "better-sqlite3",
             database: dbPath,
-            entities: [Config, Alert, Device, Queue, Webhook, Contact, ContactAddress, ScheduledMessage],
-            migrations: [ContactTables1654432080899, ScheduledMessageTable1665083072000],
+            entities: [Config, Alert, Device, Queue, Webhook, Contact, ContactAddress, ScheduledMessage, PinnedChat],
+            migrations: [ContactTables1654432080899, ScheduledMessageTable1665083072000, PinnedChatTable1727700000000],
             migrationsRun: !shouldSync,
             migrationsTableName: "migrations",
             synchronize: shouldSync
@@ -91,6 +92,13 @@ export class ServerRepository extends EventEmitter {
      */
     webhooks() {
         return this.db.getRepository(Webhook);
+    }
+
+    /**
+     * Get the pinned chats repo
+     */
+    pinnedChats() {
+        return this.db.getRepository(PinnedChat);
     }
 
     /**
@@ -193,6 +201,28 @@ export class ServerRepository extends EventEmitter {
         if (id) return [await repo.findOneBy({ id })];
         if (url) return [await repo.findOneBy({ url })];
         return await repo.find();
+    }
+
+    public async getPinnedChats(): Promise<Array<PinnedChat>> {
+        const repo = this.pinnedChats();
+        return await repo.find({ order: { pinIndex: "ASC" } });
+    }
+
+    public async setPinnedChat(chatGuid: string, pinIndex: number): Promise<PinnedChat> {
+        const repo = this.pinnedChats();
+        const existing = await repo.findOneBy({ chatGuid });
+        if (existing) {
+            existing.pinIndex = pinIndex;
+            return await repo.save(existing);
+        }
+
+        const item = repo.create({ chatGuid, pinIndex });
+        return await repo.save(item);
+    }
+
+    public async removePinnedChat(chatGuid: string): Promise<void> {
+        const repo = this.pinnedChats();
+        await repo.delete({ chatGuid });
     }
 
     public async getContacts(withAvatars = false): Promise<Array<Contact>> {
